@@ -1,103 +1,68 @@
 from pathlib import Path
-import sys
 import joblib
 import streamlit as st
+from src.preprocessing import clean_text
 
-# =========================
-# Configuration
-# =========================
 BASE_DIR = Path(__file__).resolve().parent
-SRC_DIR = BASE_DIR / "src"
+MODELS_DIR = BASE_DIR / 'models'
+MODEL_NAMES = ['naive_bayes', 'logistic_regression', 'svm', 'random_forest']
 
-if str(SRC_DIR) not in sys.path:
-    sys.path.append(str(SRC_DIR))
-
-from preprocessing import clean_text
-
-st.set_page_config(
-    page_title="Spam Detector",
-    page_icon="📧",
-    layout="centered"
-)
-
-
-# =========================
-# Load Model
-# =========================
 @st.cache_resource
-def load_artifacts():
-    vectorizer_path = BASE_DIR / "models" / "vectorizer.pkl"
-    model_path = BASE_DIR / "models" / "svm.pkl"
+def load_models():
+    vectorizer = joblib.load(MODELS_DIR / 'vectorizer.pkl')
+    models = {name: joblib.load(MODELS_DIR / f'{name}.pkl') for name in MODEL_NAMES}
+    return vectorizer, models
 
-    if not vectorizer_path.exists():
-        raise FileNotFoundError(f"Vectorizer introuvable : {vectorizer_path}")
+vectorizer, models = load_models()
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Modèle introuvable : {model_path}")
+DISPLAY_NAMES = {
+    'naive_bayes': 'Naive Bayes',
+    'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM',
+    'random_forest': 'Random Forest',
+}
+BEST_MODEL = 'logistic_regression'  # determine par evaluate.py (meilleur F1-score)
 
-    vectorizer = joblib.load(vectorizer_path)
-    model = joblib.load(model_path)
+st.title("📧Detecteur de Spam")
+st.write("Entrez un message pour verifier s'il s'agit de spam ou non.")
 
-    return vectorizer, model
+email_text = st.text_area("Message a verifier", height=150)
 
+if st.button("Verifier"):
+    if email_text.strip() == "":
+        st.warning("Merci d'entrer un message.")
+    else:
+        cleaned = clean_text(email_text)
+        vect = vectorizer.transform([cleaned])
 
-# =========================
-# Prediction
-# =========================
-def predict_message(message):
-    vectorizer, model = load_artifacts()
+        results = {}
+        for name, model in models.items():
+            pred = model.predict(vect)[0]
+            proba = model.predict_proba(vect)[0]
+            results[name] = {
+                'pred': pred,
+                'ham_pct': proba[0] * 100,
+                'spam_pct': proba[1] * 100,
+            }
 
-    cleaned = clean_text(message)
+        st.subheader("Resultats par algorithme")
+        cols = st.columns(4)
+        for col, name in zip(cols, MODEL_NAMES):
+            res = results[name]
+            with col:
+                st.markdown(f"**{DISPLAY_NAMES[name]}**")
+                if res['pred'] == 1:
+                    st.error("SPAM")
+                else:
+                    st.success("HAM")
+                st.write(f"Spam : {res['spam_pct']:.1f}%")
+                st.write(f"Ham : {res['ham_pct']:.1f}%")
 
-    features = vectorizer.transform([cleaned])
-
-    prediction = int(model.predict(features)[0])
-
-    label = "Spam" if prediction == 1 else "Ham"
-
-    confidence = None
-
-    if hasattr(model, "predict_proba"):
-        probabilities = model.predict_proba(features)[0]
-        confidence = probabilities[prediction] * 100
-
-    return label, confidence, cleaned
-
-
-# =========================
-# UI
-# =========================
-st.title("📧 Spam Detector")
-
-st.write(
-    "Entrez un message puis cliquez sur **Prédire** pour savoir s'il s'agit d'un spam."
-)
-
-message = st.text_area(
-    "Message",
-    height=180,
-    placeholder="Congratulations! You won a free iPhone. Click here..."
-)
-
-if st.button("Prédire"):
-
-    if not message.strip():
-        st.warning("Veuillez entrer un message.")
-        st.stop()
-
-    try:
-        label, confidence, cleaned = predict_message(message)
-
-        if label == "Spam":
-            st.error(f"🚨 Résultat : {label}")
+        st.divider()
+        st.subheader(f"Verdict final ({DISPLAY_NAMES[BEST_MODEL]} — meilleur F1-score)")
+        best = results[BEST_MODEL]
+        if best['pred'] == 1:
+            st.error("### SPAM")
         else:
-            st.success(f"✅ Résultat : {label}")
-
-        if confidence is not None:
-            st.metric("Confiance", f"{confidence:.2f}%")
-
-        with st.expander("Texte après prétraitement"):
-            st.write(cleaned)
-
-    except Exception as e:
-        st.error(f"Erreur : {e}")
+            st.success("### Pas spam")
+        st.write(f"Spam : {best['spam_pct']:.1f}% | Ham : {best['ham_pct']:.1f}%")

@@ -1,6 +1,6 @@
 from pathlib import Path #importation de la bibliothèque pathlib pour gérer les chemins de fichiers
 import joblib #importation de la bibliothèque joblib pour la sérialisation des modèles
-from sklearn.model_selection import train_test_split #importation de la fonction train_test_split pour diviser les données en ensembles d'entraînement et de test
+from sklearn.model_selection import GridSearchCV, train_test_split #importation de la fonction train_test_split pour diviser les données en ensembles d'entraînement et de test
 from sklearn.feature_extraction.text import TfidfVectorizer #importation de la classe TfidfVectorizer pour la vectorisation des textes
 from sklearn.naive_bayes import MultinomialNB #importation de la classe MultinomialNB pour le modèle de classification Naive Bayes multinomial
 from sklearn.linear_model import LogisticRegression #importation de la classe LogisticRegression pour le modèle de régression logistique
@@ -21,6 +21,13 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 vectorizer = TfidfVectorizer(stop_words='english') #création d'une instance de TfidfVectorizer
 X_train_tfidf = vectorizer.fit_transform(X_train) #vectorisation des textes d'entraînement
 
+param_grids = {
+    'naive_bayes': {'alpha': [0.1, 0.5, 1.0, 2.0]},
+    'logistic_regression': {'C': [0.1, 1, 10]},
+    'svm': {'C': [0.1, 1, 10]},
+    'random_forest': {'n_estimators': [100, 200], 'max_depth': [None, 30]},
+}
+
 models = {
     'naive_bayes' : MultinomialNB(), #modèle Naive Bayes multinomial
     'logistic_regression' : LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42), #modèle de régression logistique
@@ -29,11 +36,21 @@ models = {
 }
 
 for name, model in models.items():
-    print(f"Entraînement du modèle {name}...") #affichage du nom du modèle en cours d'entraînement
-    model.fit(X_train_tfidf, y_train) #entraînement du modèle sur les données vectorisées
-    joblib.dump(model, MODELS_DIR / f"{name}.pkl") #sérialisation et sauvegarde du modèle entraîné
-    print(f"Modèle {name} sauvegardé dans {MODELS_DIR / f'{name}.pkl'}") #affichage du chemin où le modèle a été sauvegardé
+    print(f"\nGridSearch : {name} ...")
+    grid = GridSearchCV(model, param_grids[name], cv=5, scoring='f1', n_jobs=-1)
+    grid.fit(X_train_tfidf, y_train)
+    print(f"  Meilleurs parametres : {grid.best_params_}")
+    print(f"  Meilleur F1 (validation croisee) : {grid.best_score_:.4f}")
+    best_model = grid.best_estimator_
 
+    if name == 'svm':
+        best_C = grid.best_params_['C']
+        best_model = SVC(kernel='linear', C=best_C, class_weight='balanced', probability=True, random_state=42)
+        best_model.fit(X_train_tfidf, y_train)
+
+    joblib.dump(best_model, MODELS_DIR / f'{name}.pkl')
+    print(f"  -> sauvegarde dans models/{name}.pkl")
+    
 joblib.dump(vectorizer, MODELS_DIR / "vectorizer.pkl") #sérialisation et sauvegarde du vectoriseur
 print(f"Vectoriseur sauvegardé dans {MODELS_DIR / 'vectorizer.pkl'}") #affichage du chemin où le vectoriseur a été sauvegardé
 print("\nTermine : 4 modèles entraînés et sauvegardés avec succès.")
