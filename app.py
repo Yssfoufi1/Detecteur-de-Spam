@@ -60,9 +60,19 @@ if st.button("Verifier"):
 
         st.divider()
         st.subheader(f"Verdict final ({DISPLAY_NAMES[BEST_MODEL]} — meilleur F1-score)")
-        best = results[BEST_MODEL]
-        if best['pred'] == 1:
-            st.error("### SPAM")
+        spam_votes = sum(results[name]['pred'] for name in MODEL_NAMES)
+        ham_votes = len(MODEL_NAMES) - spam_votes
+
+        if spam_votes > ham_votes:
+            final_pred = 1
+        elif ham_votes > spam_votes:
+            final_pred = 0
         else:
-            st.success("### Pas spam")
-        st.write(f"Spam : {best['spam_pct']:.1f}% | Ham : {best['ham_pct']:.1f}%")
+            final_pred = results[BEST_MODEL]['pred']  # egalite 2-2 : tranche par le meilleur modele (F1)
+
+        st.divider()
+        st.subheader("Verdict final (vote majoritaire)")
+        if final_pred == 1:
+            st.error(f"### SPAM  —  {spam_votes}/4 modeles d'accord")
+        else:
+            st.success(f"### Pas spam  —  {ham_votes}/4 modeles d'accord")
