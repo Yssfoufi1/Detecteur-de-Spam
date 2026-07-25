@@ -1,35 +1,57 @@
-from pathlib import Path #importation de la bibliothèque pathlib pour gérer les chemins de fichiers
-import joblib #importation de la bibliothèque joblib pour la sérialisation des modèles
-from sklearn.model_selection import train_test_split #importation de la fonction train_test_split pour diviser les données en ensembles d'entraînement et de test
-from sklearn.metrics import classification_report, f1_score, accuracy_score #importation des fonctions pour évaluer les performances des modèles
-from preprocessing import load_and_prepare_data #importation de la fonction load_and_prepare_data pour charger et préparer les données
+from pathlib import Path
+import joblib
+from scipy.sparse import hstack
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, recall_score, precision_score, f1_score
+from preprocessing import load_and_prepare_data, extract_extra_features
 
-BASE_DIR = Path(__file__).resolve().parent.parent #définition du répertoire de base du projet
-DATA_PATH = BASE_DIR / 'data' / 'spam.csv' #définition du chemin vers le fichier de données
-MODELS_DIR = BASE_DIR / 'models' #définition du répertoire pour enregistrer les modèles
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_PATH = BASE_DIR / 'data' / 'spam_with_phishing.csv'
+MODELS_DIR = BASE_DIR / 'models'
 
-df = load_and_prepare_data(DATA_PATH) #chargement et préparation des données
-X = df['clean_text'] #sélection des textes nettoyés comme caractéristiques
-y = df['target'] #sélection des étiquettes comme cibles
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y) #division des données en ensembles d'entraînement et de test
-vectorizer = joblib.load(MODELS_DIR / "vectorizer.pkl") #chargement du vectoriseur sauvegardé
-X_test_tfidf = vectorizer.transform(X_test) #vectorisation des textes de test
+df = load_and_prepare_data(DATA_PATH)
+X_text = df['clean_text']
+X_extra = extract_extra_features(df['text'])
+y = df['target']
 
-model_name = ['naive_bayes', 'logistic_regression', 'svm', 'random_forest'] #liste des noms des modèles à évaluer
-results = {} #dictionnaire pour stocker les résultats des modèles
-for name in model_name:
-    model = joblib.load(MODELS_DIR / f"{name}.pkl") #chargement du modèle sauvegardé
-    y_pred = model.predict(X_test_tfidf) #prédiction des étiquettes pour les textes de test
-    accuracy = accuracy_score(y_test, y_pred) #calcul de la précision du modèle
-    f1 = f1_score(y_test, y_pred) #calcul du score F1 du modèle
-    report = classification_report(y_test, y_pred) #génération du rapport de classification
-    results[name] = {'accuracy': accuracy, 'f1_score': f1, 'classification_report': report} #stockage des résultats dans le dictionnaire
+X_text_train, X_text_test, X_extra_train, X_extra_test, y_train, y_test = train_test_split(
+    X_text, X_extra, y, test_size=0.2, random_state=42, stratify=y
+)
 
-    print(f"Résultats pour le modèle {name}:") #affichage du nom du modèle
-    print("Rapport de classification:") #affichage du rapport de classification
-    print(report) #affichage du rapport de classification
-    print(classification_report(y_test, y_pred, target_names=['ham', 'spam'])) #affichage du rapport de classification avec les noms des classes
+vectorizer = joblib.load(MODELS_DIR / 'vectorizer.pkl')
+scaler = joblib.load(MODELS_DIR / 'scaler.pkl')
 
-best_model_name = max(results, key=lambda name: results[name]['f1_score']) #sélection du modèle avec le meilleur score F1
-best_f1_score = results[best_model_name] #récupération du score F1 du meilleur modèle
-print(f"Le meilleur modèle est {best_model_name} avec un score F1 de {best_f1_score['f1_score']:.4f}") #affichage du meilleur modèle et de son score F1
+X_test_tfidf = vectorizer.transform(X_text_test)
+X_extra_test_scaled = scaler.transform(X_extra_test)
+X_test_combined = hstack([X_test_tfidf, X_extra_test_scaled])
+
+model_names = ['naive_bayes', 'logistic_regression', 'svm', 'random_forest']
+results = {}
+
+for name in model_names:
+    model = joblib.load(MODELS_DIR / f'{name}.pkl')
+    y_pred = model.predict(X_test_combined)
+
+    recall = recall_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred)
+    results[name] = {'recall': recall, 'precision': precision, 'f1_score': f1}
+
+    print(f"\n{'='*50}\nModele : {name}\n{'='*50}")
+    print(f"Recall (spam) : {recall:.4f} | Precision : {precision:.4f} | F1 : {f1:.4f}")
+    print(classification_report(y_test, y_pred, target_names=['ham', 'spam'], zero_division=0))
+
+best_model_name = max(results, key=lambda name: (results[name]['recall'], results[name]['precision']))
+print(f"\nMEILLEUR MODELE (recall) : {best_model_name} (recall = {results[best_model_name]['recall']:.4f})")
+
+best_model = joblib.load(MODELS_DIR / f'{best_model_name}.pkl')
+proba = best_model.predict_proba(X_test_combined)[:, 1]
+
+print(f"\nEffet du seuil de decision sur {best_model_name} :")
+print(f"{'Seuil':>6} | {'Precision':>10} | {'Recall':>8} | {'F1':>6}")
+for threshold in [0.5, 0.4, 0.3, 0.2, 0.1]:
+    y_pred_t = (proba >= threshold).astype(int)
+    p = precision_score(y_test, y_pred_t, zero_division=0)
+    r = recall_score(y_test, y_pred_t, zero_division=0)
+    f1_t = f1_score(y_test, y_pred_t, zero_division=0)
+    print(f"{threshold:>6.1f} | {p:>10.3f} | {r:>8.3f} | {f1_t:>6.3f}")
