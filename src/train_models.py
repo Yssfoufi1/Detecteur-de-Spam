@@ -9,6 +9,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from preprocessing import load_and_prepare_data, extract_extra_features
 
 # Chemins bases sur l'emplacement du fichier (fonctionne peu importe le dossier de lancement)
@@ -71,7 +72,7 @@ for name, model in base_models.items():
     # une seule fois avec le meilleur C trouve, pour avoir les scores de confiance
     if name == 'svm':
         best_C = grid.best_params_['C']
-        best_model = SVC(kernel='linear', C=best_C, class_weight='balanced', probability=True, random_state=42)
+        best_model = CalibratedClassifierCV(SVC(kernel='linear', C=best_C, class_weight='balanced', random_state=42), cv=5)
         best_model.fit(X_train_combined, y_train)
 
     joblib.dump(best_model, MODELS_DIR / f'{name}.pkl')
