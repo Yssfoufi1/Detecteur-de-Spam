@@ -5,6 +5,7 @@ import streamlit as st
 from scipy.sparse import hstack
 from src.preprocessing import clean_text, extract_extra_features
 
+# Configuration : chemins, noms des modeles, modele/seuil retenus pour le verdict final
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / 'models'
 MODEL_NAMES = ['naive_bayes', 'logistic_regression', 'svm', 'random_forest']
@@ -15,8 +16,9 @@ DISPLAY_NAMES = {
     'random_forest': 'Random Forest',
 }
 BEST_MODEL = 'random_forest'
-RECALL_THRESHOLD = 0.4  # badal 0.3 -- recall qriب mn maximum (0.986) bla ma nkhesro precision bzaf
+RECALL_THRESHOLD = 0.4  # recall proche du maximum (0.986) sans trop sacrifier la precision
 
+# Chargement des modeles une seule fois (mis en cache par Streamlit)
 @st.cache_resource
 def load_models():
     vectorizer = joblib.load(MODELS_DIR / 'vectorizer.pkl')
@@ -26,21 +28,22 @@ def load_models():
 
 vectorizer, scaler, models = load_models()
 
+# Interface utilisateur : titre et zone de saisie du message
 st.title("Detecteur de Spam")
 st.write("Entrez un message pour verifier s'il s'agit de spam ou non.")
-
 email_text = st.text_area("Message a verifier", height=150)
-
 if st.button("Verifier"):
     if email_text.strip() == "":
         st.warning("Merci d'entrer un message.")
     else:
+        # Preparation du message : meme pipeline que l'entrainement (TF-IDF + features + scaler)
         cleaned = clean_text(email_text)
         vect_tfidf = vectorizer.transform([cleaned])
         extra = extract_extra_features(pd.Series([email_text]))
         extra_scaled = scaler.transform(extra)
         vect_combined = hstack([vect_tfidf, extra_scaled])
 
+        # Prediction par chacun des 4 modeles
         results = {}
         for name, model in models.items():
             pred = model.predict(vect_combined)[0]
@@ -50,7 +53,7 @@ if st.button("Verifier"):
                 'ham_pct': proba[0] * 100,
                 'spam_pct': proba[1] * 100,
             }
-
+        # Affichage du resultat individuel de chaque algorithme
         st.subheader("Resultats par algorithme")
         cols = st.columns(4)
         for col, name in zip(cols, MODEL_NAMES):
@@ -64,12 +67,13 @@ if st.button("Verifier"):
                 st.write(f"Spam : {res['spam_pct']:.1f}%")
                 st.write(f"Ham : {res['ham_pct']:.1f}%")
 
+        # Vote majoritaire (affiche a titre informatif uniquement)
         spam_votes = sum(results[name]['pred'] for name in MODEL_NAMES)
         avg_spam_pct = sum(results[name]['spam_pct'] for name in MODEL_NAMES) / len(MODEL_NAMES)
 
+        # Verdict final officiel : meilleur modele + seuil optimise pour le recall
         best_spam_proba = results[BEST_MODEL]['spam_pct'] / 100
         final_pred = 1 if best_spam_proba >= RECALL_THRESHOLD else 0
-
         st.divider()
         st.subheader(f"Verdict final ({DISPLAY_NAMES[BEST_MODEL]}, seuil = {RECALL_THRESHOLD})")
         if final_pred == 1:
@@ -78,3 +82,7 @@ if st.button("Verifier"):
             st.success("### Pas spam")
         st.write(f"Probabilite spam : {results[BEST_MODEL]['spam_pct']:.1f}% (seuil : {RECALL_THRESHOLD*100:.0f}%, optimise pour recall maximal)")
         st.caption(f"Vote majoritaire (info) : {spam_votes}/4 modeles disent spam, moyenne = {avg_spam_pct:.1f}%")
+st.markdown(
+    "<p style='text-align: center; color: gray; margin-top: 40px;'>Developpe par Youssef Aoufi</p>",
+    unsafe_allow_html=True
+)
