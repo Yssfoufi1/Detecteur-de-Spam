@@ -6,17 +6,17 @@ combinant TF-IDF, feature engineering cible et quatre algorithmes de classificat
 ## Architecture
 Detecteur-de-Spam/
 ├── data/
-│ ├── spam.csv # SMS Spam Collection Dataset (source initiale)
-│ ├── Nazario.csv # Nazario Phishing Corpus (enrichissement)
-│ └── spam_with_phishing.csv # Dataset fusionne (source d'entrainement finale)
+│   ├── spam.csv                   # SMS Spam Collection Dataset (source initiale)
+│   ├── Nazario.csv                # Nazario Phishing Corpus (enrichissement)
+│   └── spam_with_phishing.csv     # Dataset fusionne (source d'entrainement finale)
 ├── notebooks/
-│ └── exploration.ipynb # Analyse exploratoire des donnees (EDA)
+│   └── exploration.ipynb          # Analyse exploratoire des donnees (EDA)
 ├── src/
-│ ├── preprocessing.py # Nettoyage, lemmatisation, feature engineering
-│ ├── train_models.py # Entrainement + GridSearchCV des 4 modeles
-│ └── evaluate.py # Evaluation + selection du meilleur modele
-├── models/ # Modeles entraines (.pkl), generes par train_models.py
-├── app.py # Interface Streamlit
+│   ├── preprocessing.py           # Nettoyage, lemmatisation, feature engineering
+│   ├── train_models.py            # Entrainement + GridSearchCV des 4 modeles
+│   └── evaluate.py                # Evaluation + selection du meilleur modele
+├── models/                        # Modeles entraines (.pkl), generes par train_models.py
+├── app.py                         # Interface Streamlit
 ├── requirements.txt
 └── README.md
 ## Installation
