@@ -4,6 +4,7 @@ Systeme de detection automatique de spam et de tentatives de phishing dans les e
 combinant TF-IDF, feature engineering cible et quatre algorithmes de classification.
 
 ## Architecture
+```
 Detecteur-de-Spam/
 ├── data/
 │   ├── spam.csv                   # SMS Spam Collection Dataset (source initiale)
@@ -19,6 +20,7 @@ Detecteur-de-Spam/
 ├── app.py                         # Interface Streamlit
 ├── requirements.txt
 └── README.md
+```
 ## Installation
 
 ```bash
