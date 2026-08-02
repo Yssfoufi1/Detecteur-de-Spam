@@ -2,5 +2,6 @@ pandas
 scikit-learn
 nltk
 joblib
+scipy
 matplotlib
 streamlit
